@@ -18,6 +18,17 @@ App profesional para tu taller: **clientes y equipos** (con fotos de evidencia y
 
 > El repositorio debe ser **público** para usar GitHub Pages gratis (o tener un plan que lo permita en privados).
 
+## Mismos datos en tu PC y tu celular (nube con Supabase)
+
+1. **Una sola vez en Supabase:** SQL Editor → New query → pega todo `supabase/schema.sql` → **Run**.
+   Luego Authentication → Sign In / Providers → Email → desactiva **Confirm email** (o confirma tu correo al registrarte).
+2. **En la PC:** Ajustes → **Nube** → **Crear cuenta** con tu correo y una contraseña. Tus datos se suben solos.
+3. **En el celular:** en la bienvenida toca **"¿Ya usas Reparo en otro dispositivo? Inicia sesión"**
+   (o Ajustes → Nube → Iniciar sesión) con el mismo correo y contraseña.
+
+Desde ahí todo se sincroniza solo (también al volver la conexión). Las fotos de evidencia se quedan en el dispositivo donde se tomaron.
+Guía completa: `docs/nube-supabase.md`.
+
 ## Instalarla como app
 
 - **Android (Chrome):** abre el enlace → menú ⋮ → **Instalar app** (o "Agregar a pantalla principal").
@@ -29,7 +40,7 @@ Después de abrirla una vez con internet, funciona **sin conexión**.
 ## Importante sobre tus datos
 
 - Los datos viven **en cada dispositivo** (no en la nube). Si usas la app en el celular y en la PC,
-  cada uno tiene sus propios datos, salvo que actives la sincronización con el servidor opcional (ver `server/README.md`).
+  cada uno tiene sus propios datos, salvo que inicies sesión en **Ajustes → Nube** (ver arriba).
 - Haz **respaldos** desde **Ajustes → Datos y respaldo → Descargar respaldo** de forma periódica.
   Si borras los datos del navegador o desinstalas la app sin respaldo, los datos se pierden.
 
