@@ -118,6 +118,21 @@
   }
 }
 
+/* Escala tipográfica de escritorio: con puntero fino y pantallas anchas los
+   metadatos no bajan de 12 px y el texto secundario de 13 px (en el teléfono la
+   escala compacta de tokens.css se mantiene). */
+@media (min-width: 900px) {
+  :root {
+    --text-2xs: 12px;
+    --text-xs: 13px;
+  }
+}
+
+/* Anclas y foco por teclado: nada queda escondido bajo la barra superior fija. */
+main :where(section, [id]) {
+  scroll-margin-top: calc(var(--app-header-h, 64px) + 12px);
+}
+
 /* --------------------------------- Reset --------------------------------- */
 *,
 *::before,
