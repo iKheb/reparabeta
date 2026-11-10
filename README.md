@@ -22,11 +22,12 @@ App profesional para tu taller: **clientes y equipos** (con fotos de evidencia y
 
 1. **Una sola vez en Supabase:** SQL Editor → New query → pega todo `supabase/schema.sql` → **Run**.
    Luego Authentication → Sign In / Providers → Email → desactiva **Confirm email** (o confirma tu correo al registrarte).
+   Para las fotos: pega también `supabase/storage.sql` en el SQL Editor → **Run**.
 2. **En la PC:** Ajustes → **Nube** → **Crear cuenta** con tu correo y una contraseña. Tus datos se suben solos.
 3. **En el celular:** en la bienvenida toca **"¿Ya usas Reparo en otro dispositivo? Inicia sesión"**
    (o Ajustes → Nube → Iniciar sesión) con el mismo correo y contraseña.
 
-Desde ahí todo se sincroniza solo (también al volver la conexión). Las fotos de evidencia se quedan en el dispositivo donde se tomaron.
+Desde ahí todo se sincroniza solo (también al volver la conexión). Las fotos de evidencia también se guardan en tu nube (espacio privado).
 Guía completa: `docs/nube-supabase.md`.
 
 ## Instalarla como app

@@ -10,6 +10,7 @@ import { setCachedSettings } from '@/data/settings-cache';
 import { getCloudAuth, getCloudClient, subscribeCloudAuth, useCloudAuth, cloudSignOut } from './client';
 import { getCloudConfig, getCloudConfigState, saveCloudConfig, subscribeCloudConfig, useCloudConfig, validateCloudConfig, type CloudConfig } from './config';
 import { CloudError, toCloudError, type CloudErrorKind } from './errors';
+import type { PhotoProgress } from './photos';
 import { CLOUD_TABLES, hasCloudPending, readLastCloudSyncAt, resetCloudState, runCloudCycle, type CloudSyncResult } from './engine';
 
 /* ------------------------------- Estado ---------------------------------- */
@@ -27,6 +28,12 @@ export interface CloudStatus {
   errorKind: CloudErrorKind | null;
   /** Resultado de la última sincronización correcta de esta sesión. */
   lastResult: CloudSyncResult | null;
+  /** Progreso de fotos en curso, p. ej. { phase: 'upload', done: 3, total: 10 }. */
+  photos: PhotoProgress | null;
+  /** Texto listo para mostrar: "Subiendo fotos 3/10" / "Descargando fotos 2/8". */
+  photosLabel: string | null;
+  /** Aviso sobre fotos (p. ej. falta storage.sql); los datos sí se sincronizan. */
+  photoWarning: string | null;
 }
 
 interface Internal {
@@ -35,9 +42,10 @@ interface Internal {
   errorKind: CloudErrorKind | null;
   lastSyncAt: number | null;
   lastResult: CloudSyncResult | null;
+  photos: PhotoProgress | null;
 }
 
-let status: Internal = { running: false, error: null, errorKind: null, lastSyncAt: null, lastResult: null };
+let status: Internal = { running: false, error: null, errorKind: null, lastSyncAt: null, lastResult: null, photos: null };
 const listeners = new Set<() => void>();
 
 function setStatus(patch: Partial<Internal>): void {
@@ -99,13 +107,16 @@ export function useCloudStatus(): CloudStatus {
       error: state === 'error' ? s.error : null,
       errorKind: state === 'error' ? s.errorKind : null,
       lastResult: s.lastResult,
+      photos: signedIn ? s.photos : null,
+      photosLabel: signedIn && s.photos ? `${s.photos.phase === 'upload' ? 'Subiendo' : 'Descargando'} fotos ${Math.min(s.photos.done, s.photos.total)}/${s.photos.total}` : null,
+      photoWarning: signedIn ? (s.lastResult?.photoError ?? null) : null,
     };
   }, [cfg.config, auth.userId, auth.email, s, online]);
 }
 
 /* ----------------------------- Sincronizar ------------------------------- */
 
-async function runOnce(): Promise<CloudSyncResult> {
+async function runOnce(downloadPhotos = true): Promise<CloudSyncResult> {
   const cfg = await getCloudConfig();
   if (!cfg) throw new CloudError('Conecta tu proyecto de Supabase en Ajustes → Nube.', 'config');
   if (!getOnline()) throw new CloudError('Sin conexión a internet. Se sincronizará al volver la conexión.', 'offline');
@@ -115,7 +126,7 @@ async function runOnce(): Promise<CloudSyncResult> {
   const user = data.session?.user;
   if (!user) throw new CloudError('Inicia sesión para sincronizar.', 'auth');
   try {
-    return await runCloudCycle(client, { projectUrl: cfg.url, userId: user.id });
+    return await runCloudCycle(client, { projectUrl: cfg.url, userId: user.id }, { onProgress: (p) => setStatus({ photos: p }), downloadPhotos });
   } catch (err) {
     throw toCloudError(err, 'No se pudo sincronizar.');
   }
@@ -128,17 +139,17 @@ let queued: Promise<CloudSyncResult> | null = null;
  * Sincroniza ahora (baja, aplica y sube). Si ya hay una en curso, encola UNA
  * más para no perder cambios hechos mientras tanto.
  */
-export function cloudSyncNow(): Promise<CloudSyncResult> {
+export function cloudSyncNow(opts: { downloadPhotos?: boolean } = {}): Promise<CloudSyncResult> {
   if (!current) {
     setStatus({ running: true });
-    current = runOnce()
+    current = runOnce(opts.downloadPhotos !== false)
       .then((r) => {
-        setStatus({ running: false, error: null, errorKind: null, lastSyncAt: Date.now(), lastResult: r });
+        setStatus({ running: false, error: null, errorKind: null, lastSyncAt: Date.now(), lastResult: r, photos: null });
         return r;
       })
       .catch((err: unknown) => {
         const e = toCloudError(err, 'No se pudo sincronizar.');
-        setStatus({ running: false, error: e.message, errorKind: e.kind });
+        setStatus({ running: false, error: e.message, errorKind: e.kind, photos: null });
         throw e;
       })
       .finally(() => {
@@ -151,7 +162,7 @@ export function cloudSyncNow(): Promise<CloudSyncResult> {
       .catch(() => undefined)
       .then(() => {
         queued = null;
-        return cloudSyncNow();
+        return cloudSyncNow(opts);
       });
   }
   return queued;
@@ -162,11 +173,14 @@ export function cloudSyncNow(): Promise<CloudSyncResult> {
 /**
  * Primer inicio en un dispositivo nuevo: baja todo de la nube (con sesión ya
  * iniciada), aplica sin auditar, marca el onboarding como terminado y deja la
- * app lista. Devuelve cuántos registros llegaron.
+ * app lista. Las fotos se siguen descargando en segundo plano (ver
+ * useCloudStatus().photosLabel). Devuelve cuántos registros llegaron.
  */
 export async function restoreFromCloud(): Promise<{ pulled: number; clients: number; expenses: number; inventory: number }> {
   await dbReady();
-  const r = await cloudSyncNow();
+  // Los datos primero (rápido); las fotos se descargan después en segundo plano.
+  const r = await cloudSyncNow({ downloadPhotos: false });
+  void cloudSyncNow().catch(() => undefined);
   await recomputeFolioSequence().catch(() => undefined);
   const saved = await db.transaction('rw', db.settings, async () => {
     const s = withSettingsDefaults(await db.settings.get('settings'));
@@ -251,6 +265,8 @@ function runAuto(): () => void {
           .then((r: { id?: string; ts?: number; updatedAt?: number } | undefined) => `${r?.id ?? ''}@${r?.updatedAt ?? r?.ts ?? 0}`),
       ),
       db.settings.get('settings').then((s) => String(s?.updatedAt ?? 0)),
+      db.photos.count(),
+      db.meta.get('photoTombstones').then((r) => Object.keys((r?.value as object) ?? {}).length),
       db.clients.count(),
       db.expenses.count(),
       db.inventory.count(),
